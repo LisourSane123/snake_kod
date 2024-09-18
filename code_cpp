@@ -1,0 +1,196 @@
+#include "LedControl.h"
+const int SW_pin = 2; // digital pin connected to switch output
+const int X_pin = 0; // analog pin connected to X output
+const int Y_pin = 1; // analog pin connected to Y output
+
+bool running = true;
+int last_move = 1;
+
+
+int xbody[64] = {1, 1, 1, 1};
+int ybody[64] = {4, 3, 2, 1};
+int bodyLen = 4;
+
+LedControl lc=LedControl(12,10,11,1);
+
+int headX = xbody[0];
+int headY = ybody[0];
+
+int tailX = xbody[bodyLen-1];
+int tailY = ybody[bodyLen-1];
+
+int food_x_cord = 5;
+int food_y_cord = 5;
+int food_number = 0;
+
+int body_number[64] = {0};
+int generate_arr[64] = {0};
+
+void generate_food(){
+  int n = 0;
+  for (int i=0; i<bodyLen; i++){
+    int inb = ybody[i] * 8 + xbody[i];
+    body_number[i] = inb;
+  }
+  for (int j=0; j<64; j++){
+    bool inside = true;
+    for (int k=0; k<bodyLen; k++){
+      if (j == body_number[k]){
+        inside = false;
+      } else{
+      }
+    }
+    if (inside){
+      generate_arr[n] = j;
+      n += 1;
+    }
+  }
+  int food_number_index = rand() % (64-bodyLen);
+  food_number = generate_arr[food_number_index]; 
+  //lokalnie się zmienia ale nie globalnie.
+}
+
+void setup() {
+  pinMode(SW_pin, INPUT);
+  digitalWrite(SW_pin, HIGH);
+  Serial.begin(9600);
+  lc.shutdown(0,false);
+  /* Set the brightness to a medium values */
+  lc.setIntensity(0,1);
+  /* and clear the display */
+  lc.clearDisplay(0);  
+
+  int x_pin = analogRead(X_pin) - 523;
+  int y_pin =  - analogRead(Y_pin) + 523;
+    for (int i=0; i<bodyLen; i++){
+      lc.setLed(0, xbody[i], ybody[i], true);
+    }
+  bool start = true;
+  while (start) {
+    x_pin = analogRead(X_pin) - 523;
+    y_pin =  - analogRead(Y_pin) + 523;
+    if (x_pin < y_pin - 100 && x_pin > -y_pin + 100 && last_move != 2){
+      //headY += 1;
+      last_move = 1;
+      start = false;
+    } else if (x_pin > y_pin - 100 && x_pin < -y_pin + 100 && last_move != 1){
+      //headY -= 1;
+      last_move = 2;
+      start = false;
+    } else if  (x_pin < y_pin - 100 && x_pin < -y_pin + 100 && last_move != 4){
+      //headX -= 1;
+      last_move = 3;
+      start = false;
+    } else if (x_pin > y_pin - 100 && x_pin > -y_pin + 100 && last_move != 3){
+      //headX += 1;
+      last_move = 4;
+      start = false;
+    } else {
+      
+    }
+  }
+  generate_food();
+  food_y_cord = floor(food_number / 8);
+  food_x_cord = food_number % 8;
+  lc.setLed(0, food_x_cord, food_y_cord, true);
+}
+
+void move_as_last_move(int last_move) {
+  switch(last_move){ 
+    case 1:
+      headY += 1;
+      break;
+    case 2:
+      headY -= 1;
+      break;
+    case 4:
+      headX += 1;
+      break;
+    case 3:
+      headX -= 1;
+      break;
+  }
+}
+
+void move_snake_body(int headX, int headY){
+  for (int i=1; i<bodyLen; i++){
+      xbody[bodyLen-i] = xbody[bodyLen-i-1];
+      ybody[bodyLen-i] = ybody[bodyLen-i-1];
+  }
+  xbody[0] = headX;
+  ybody[0] = headY;
+}
+
+void if_body_was_touched(int headX, int headY){
+  for (int i=1; i<bodyLen; i++){
+    if (headX == xbody[i] && headY == ybody[i]){
+      Serial.print("Zjadłeś samego siebie");
+      delay(100);
+      exit(0);
+    }
+  }
+}
+
+void loop() {
+  int x_pin = analogRead(X_pin) - 523;
+  int y_pin =  - analogRead(Y_pin) + 523;
+  // Serial.print("Switch:  ");
+  // Serial.print(digitalRead(SW_pin));
+  // Serial.print("\n");
+  // Serial.print("X-axis: ");
+  // Serial.print(x_pin);
+  // Serial.print("\n");
+  // Serial.print("Y-axis: ");
+  // Serial.print(y_pin);
+  // Serial.print("\n\n");
+
+  if (x_pin < y_pin - 100 && x_pin > -y_pin + 100 && last_move != 2){
+    Serial.print("move up");
+    headY += 1;
+    last_move = 1;
+  } else if (x_pin > y_pin + 100 && x_pin < -y_pin - 100 && last_move != 1){
+    Serial.print("move down");
+    headY -= 1;
+    last_move = 2;
+  } else if  (x_pin < y_pin - 100 && x_pin < -y_pin - 100 && last_move != 4){
+    Serial.print("move left");
+    headX -= 1;
+    last_move = 3;
+  } else if (x_pin > y_pin + 100 && x_pin > -y_pin + 100 && last_move != 3){
+    Serial.print("move right");
+    headX += 1;
+    last_move = 4;
+  } else{
+    Serial.print("powtarzam ostatni ruch");
+    move_as_last_move(last_move);
+  }
+  tailX = xbody[bodyLen-1];
+  tailY = ybody[bodyLen-1];
+  move_snake_body(headX, headY);
+  lc.setLed(0, headX, headY, true);
+
+  Serial.print("\n");
+  if (headX < 0 || headX > 7){
+    Serial.print("Zderzenie z ścianą");
+    delay(100);
+    exit(0);
+  } else if (headY < 0 || headY > 7){
+    Serial.print("Zderzenie z ścianą");
+    delay(100);
+    exit(0);
+  }
+  if_body_was_touched(headX, headY);
+  if(headX == food_x_cord && headY == food_y_cord){
+    xbody[bodyLen] = tailX;
+    ybody[bodyLen] = tailY;
+    bodyLen += 1;
+    generate_food();
+    food_y_cord = floor(food_number / 8);
+    food_x_cord = food_number % 8;
+    lc.setLed(0, food_x_cord, food_y_cord, true);
+  } else {
+      lc.setLed(0, tailX, tailY, false);
+  }
+
+  delay(1000);
+}
